@@ -1,0 +1,53 @@
+
+================================================================================
+TERRAIN CLASSIFICATION MODEL - PERFORMANCE BENCHMARK REPORT
+================================================================================
+
+EXECUTED ON: 2026-03-21 06:47:38
+DEVICE: cuda
+
+--------------------------------------------------------------------------------
+KEY FINDINGS:
+--------------------------------------------------------------------------------
+
+1. SINGLE IMAGE INFERENCE:
+   • Mean Inference Time: 51.47 ms
+   • FPS: 19.43
+   • CPU Usage: 77.0%
+   • Memory: 30.8%
+
+2. BATCH PROCESSING (32 images):
+   • Total Time: 107.67 ms
+   • Per-Image Time: 3.36 ms
+   • Throughput: 297 images/second
+   • FPS: 9.29
+
+3. CPU RUNTIME METRICS:
+   • Average CPU Usage: 8.8%
+   • Peak CPU Usage: 100.0%
+   • Average Memory: 3668 MB
+   • Peak Memory: 3689 MB
+
+4. RECOMMENDATIONS:
+   • Optimal Batch Size: 16-32
+   • Best for Real-Time: Batch Size = 1 (19.4 FPS)
+   • Best for Throughput: Batch Size = 32 (297 imgs/sec)
+
+--------------------------------------------------------------------------------
+DETAILED RESULTS TABLE:
+--------------------------------------------------------------------------------
+
+ Batch Size Mean Time (ms) Median Time (ms) Std Dev (ms) Min (ms) Max (ms) P95 (ms) P99 (ms)   FPS Images/sec Avg CPU % Peak CPU % Memory %
+          1         51.465           40.454       21.770   28.672  110.183   98.215  107.960 19.43      19.43      77.0      100.0     30.8
+          2         46.250           47.052       11.926   31.119   89.444   67.625   80.063 21.62      43.24      81.0      100.0     30.6
+          4         35.058           31.238       12.977   16.496   65.036   51.804   62.939 28.52     114.10      58.3      100.0     30.6
+          8         27.249           27.141        0.721   26.117   30.135   28.271   29.307 36.70     293.58       1.0       50.0     30.6
+         16         53.509           53.449        0.618   52.589   56.516   54.275   55.522 18.69     299.01       3.7       50.0     30.7
+         32        107.669          107.667        1.287  103.390  110.921  109.829  110.650  9.29     297.21      23.0      100.0     30.8
+
+--------------------------------------------------------------------------------
+CONCLUSION:
+Model is suitable for BATCH processing.
+Performance metrics saved in: performance_benchmark_results.json
+
+================================================================================
