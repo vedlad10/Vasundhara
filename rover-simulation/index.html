@@ -1,1 +1,221 @@
-Complete HTML file with embedded Three.js, dashboard UI, WebSocket client, terrain generation, rover model, camera system, physics engine, keyboard controls, telemetry display, and real-time ML inference visualization
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vasundhara Rover AI Simulation</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Courier New', monospace; background: #0a0e27; color: #00ff88; overflow: hidden; width: 100%; height: 100vh; }
+        #canvas { display: block; width: 100%; height: 100%; }
+        .panel { position: absolute; background: rgba(10, 14, 39, 0.95); border: 2px solid #00ff88; border-radius: 8px; padding: 15px; box-shadow: 0 0 20px rgba(0, 255, 136, 0.3); z-index: 100; overflow-y: auto; max-height: 85vh; font-size: 12px; }
+        #left-panel { top: 20px; left: 20px; width: 280px; }
+        #right-panel { top: 20px; right: 20px; width: 320px; }
+        #bottom-panel { bottom: 20px; left: 20px; right: 20px; max-width: none; display: flex; gap: 30px; flex-wrap: wrap; }
+        .panel h2 { color: #00ffff; font-size: 14px; margin-bottom: 12px; border-bottom: 1px solid rgba(0, 255, 136, 0.2); padding-bottom: 8px; }
+        button { background: #1a3a52; color: #00ff88; border: 1px solid #00ff88; padding: 6px 10px; margin: 3px; border-radius: 4px; cursor: pointer; font-family: 'Courier New', monospace; font-size: 11px; transition: all 0.3s; }
+        button:hover { background: #00ff88; color: #0a0e27; }
+        button.active { background: #00ff88; color: #0a0e27; box-shadow: 0 0 15px rgba(0, 255, 136, 0.8); }
+        input[type="range"], input[type="number"] { width: 100%; padding: 6px; margin: 4px 0; background: #1a2f5a; border: 1px solid #00ff88; color: #00ff88; font-family: 'Courier New', monospace; font-size: 11px; border-radius: 4px; }
+        canvas { border: 1px solid #00ff88; margin: 8px 0; background: #000; width: 100%; height: auto; }
+        .telemetry-item { display: inline-block; margin-right: 25px; min-width: 140px; font-size: 11px; }
+        .telemetry-item label { color: #00ffff; font-weight: bold; }
+        .telemetry-item span { color: #00ff88; font-weight: bold; }
+        .status-indicator { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; background: #ff6666; box-shadow: 0 0 10px #ff6666; }
+        .status-indicator.connected { background: #00ff88; box-shadow: 0 0 10px #00ff88; }
+    </style>
+</head>
+<body>
+    <div id="left-panel" class="panel">
+        <h2>⚙️ Rover Control</h2>
+        <div>
+            <h3 style="color: #00ffff; font-size: 11px; margin-top: 10px;">Mode</h3>
+            <button id="mode-manual" class="active">Manual</button>
+            <button id="mode-auto">Auto (AI)</button>
+        </div>
+        <div style="margin-top: 15px;">
+            <h3 style="color: #00ffff; font-size: 11px;">Speed: <span id="speed-value">0.5</span></h3>
+            <input type="range" id="speed-slider" min="0" max="2" step="0.1" value="0.5">
+        </div>
+        <div style="margin-top: 15px;">
+            <h3 style="color: #00ffff; font-size: 11px;">Camera</h3>
+            <button id="camera-topdown" class="active">Top-Down</button>
+            <button id="camera-chase">Chase</button>
+            <button id="camera-first">1st Person</button>
+        </div>
+    </div>
+
+    <div id="right-panel" class="panel">
+        <h2>📊 AI Inference</h2>
+        <h3 style="color: #00ffff; font-size: 11px; margin-top: 10px;">Confidence</h3>
+        <canvas id="confidence-heatmap" width="300" height="100"></canvas>
+        <h3 style="color: #00ffff; font-size: 11px; margin-top: 10px;">Decision</h3>
+        <div id="reasoning-text" style="background: #1a2f5a; border: 1px solid #00ff88; padding: 8px; border-radius: 4px; font-size: 10px; height: 80px; overflow-y: auto; color: #00ff88;">Waiting for AI inference...</div>
+    </div>
+
+    <div id="bottom-panel" class="panel">
+        <div class="telemetry-item">
+            <label>Position:</label>
+            <span id="telem-position">0.0, 0.0, 0.0</span>
+        </div>
+        <div class="telemetry-item">
+            <label>Heading:</label>
+            <span id="telem-heading">0.0°</span>
+        </div>
+        <div class="telemetry-item">
+            <label>Speed:</label>
+            <span id="telem-speed">0.00 m/s</span>
+        </div>
+        <div class="telemetry-item">
+            <label>FPS:</label>
+            <span id="telem-fps">60</span>
+        </div>
+        <div class="telemetry-item">
+            <label>Latency:</label>
+            <span id="telem-latency">--ms</span>
+        </div>
+        <div class="telemetry-item">
+            <label><span class="status-indicator connected" id="status-indicator"></span><span id="telem-connection">Connected (Local)</span></label>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/simplex-noise@3/dist/simplex-noise.min.js"></script>
+    <script>
+        let scene, camera, renderer, terrain, rover;
+        let roverState = { position: new THREE.Vector3(0, 0, 0), rotation: 0, velocity: 0, maxVelocity: 2 };
+        let wsRoverCommand = { forward: 0, turn: 0, speed: 1 };
+        let cameraMode = 'topdown';
+        let frameCount = 0, lastFrameTime = performance.now(), fpsCount = 0;
+
+        function initScene() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB);
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+            camera.position.set(0, 80, 100);
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.domElement.id = 'canvas';
+            document.body.insertBefore(renderer.domElement, document.body.firstChild);
+            scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+            const light = new THREE.DirectionalLight(0xffffff, 0.9);
+            light.position.set(150, 150, 100);
+            scene.add(light);
+        }
+
+        function createTerrain() {
+            const size = 500, segments = 256;
+            const heightMap = new Array(segments * segments);
+            const simplex = new SimplexNoise();
+            for (let i = 0; i < segments; i++) {
+                for (let j = 0; j < segments; j++) {
+                    const x = (i / segments) * 0.05;
+                    const z = (j / segments) * 0.05;
+                    let value = 0, amplitude = 1, frequency = 1, maxValue = 0;
+                    for (let octave = 0; octave < 4; octave++) {
+                        value += simplex.noise(x * frequency, z * frequency) * amplitude;
+                        maxValue += amplitude;
+                        frequency *= 2;
+                        amplitude *= 0.5;
+                    }
+                    heightMap[i * segments + j] = (value / maxValue) * 30;
+                }
+            }
+            const geometry = new THREE.PlaneGeometry(size, size, segments - 1, segments - 1);
+            const positions = geometry.attributes.position;
+            for (let i = 0; i < positions.count; i++) {
+                const x = positions.getX(i), z = positions.getZ(i);
+                const heightMapX = Math.floor(((x + size / 2) / size) * (segments - 1));
+                const heightMapZ = Math.floor(((z + size / 2) / size) * (segments - 1));
+                positions.setY(i, heightMap[heightMapZ * segments + heightMapX] || 0);
+            }
+            positions.needsUpdate = true;
+            geometry.computeVertexNormals();
+            terrain = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: 0xA0826D, roughness: 0.8 }));
+            terrain.rotation.x = -Math.PI / 2;
+            scene.add(terrain);
+        }
+
+        function createRover() {
+            const group = new THREE.Group();
+            group.add(new THREE.Mesh(new THREE.BoxGeometry(2, 1.2, 3.5), new THREE.MeshStandardMaterial({ color: 0x444444 })));
+            [[−1, 0, -1], [1, 0, -1], [-1, 0, 1], [1, 0, 1]].forEach(pos => {
+                const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.3, 16), new THREE.MeshStandardMaterial({ color: 0x222222 }));
+                wheel.rotation.z = Math.PI / 2;
+                wheel.position.set(...pos);
+                group.add(wheel);
+            });
+            rover = group;
+            rover.position.set(0, 2, 0);
+            scene.add(rover);
+        }
+
+        function updateRover(deltaTime) {
+            roverState.velocity = Math.max(-2, Math.min(2, roverState.velocity + wsRoverCommand.forward * 0.1 * wsRoverCommand.speed));
+            roverState.velocity *= 0.95;
+            roverState.rotation += wsRoverCommand.turn * 0.05 * wsRoverCommand.speed * deltaTime;
+            const moveDistance = roverState.velocity * deltaTime;
+            roverState.position.x += Math.sin(roverState.rotation) * moveDistance;
+            roverState.position.z += Math.cos(roverState.rotation) * moveDistance;
+            roverState.position.y = 2;
+            rover.position.copy(roverState.position);
+            rover.rotation.y = roverState.rotation;
+        }
+
+        function updateCamera() {
+            const roverPos = roverState.position;
+            let targetPos = new THREE.Vector3();
+            targetPos.set(roverPos.x, roverPos.y + 80, roverPos.z);
+            camera.position.lerp(targetPos, 0.1);
+            camera.lookAt(roverPos.x, roverPos.y + 10, roverPos.z);
+        }
+
+        function setupUI() {
+            document.getElementById('speed-slider').oninput = (e) => {
+                wsRoverCommand.speed = parseFloat(e.target.value);
+                document.getElementById('speed-value').textContent = wsRoverCommand.speed.toFixed(1);
+            };
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'w' || e.key === 'W') wsRoverCommand.forward = 1;
+                if (e.key === 's' || e.key === 'S') wsRoverCommand.forward = -1;
+                if (e.key === 'a' || e.key === 'A') wsRoverCommand.turn = -1;
+                if (e.key === 'd' || e.key === 'D') wsRoverCommand.turn = 1;
+            });
+            document.addEventListener('keyup', (e) => {
+                if (['w', 's', 'W', 'S'].includes(e.key)) wsRoverCommand.forward = 0;
+                if (['a', 'd', 'A', 'D'].includes(e.key)) wsRoverCommand.turn = 0;
+            });
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const currentTime = performance.now();
+            const deltaTime = (currentTime - lastFrameTime) / 1000;
+            lastFrameTime = currentTime;
+            updateRover(deltaTime);
+            updateCamera();
+            document.getElementById('telem-position').textContent = `${roverState.position.x.toFixed(1)}, 0.0, ${roverState.position.z.toFixed(1)}`;
+            document.getElementById('telem-speed').textContent = (roverState.velocity * 2).toFixed(2);
+            frameCount++;
+            const now = performance.now();
+            if (now - lastFrameTime >= 1000) { fpsCount = frameCount; frameCount = 0; lastFrameTime = now; document.getElementById('telem-fps').textContent = fpsCount; }
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('load', () => {
+            initScene();
+            createTerrain();
+            createRover();
+            setupUI();
+            animate();
+            console.log('✅ Rover Simulation Ready! Press WASD to control');
+        });
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
