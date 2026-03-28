@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lorenz Attractor – Vasundhara</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #000;
+      overflow: hidden;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      color: #fff;
+    }
+
+    canvas { display: block; }
+
+    /* ── HUD overlay ───────────────────────────────────────────── */
+    #hud {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    #title {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: #a0f0ff;
+      text-shadow: 0 0 12px #0af;
+      margin-bottom: 4px;
+    }
+
+    #subtitle {
+      font-size: 12px;
+      color: #888;
+      letter-spacing: 1px;
+    }
+
+    /* ── Stats panel ───────────────────────────────────────────── */
+    #stats {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      background: rgba(0,0,0,0.65);
+      border: 1px solid rgba(0,200,255,0.25);
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 12px;
+      line-height: 1.8;
+      min-width: 170px;
+      backdrop-filter: blur(6px);
+      z-index: 10;
+    }
+
+    #stats span { color: #4cf; }
+
+    /* ── Controls panel ────────────────────────────────────────── */
+    #controls {
+      position: fixed;
+      bottom: 16px;
+      left: 16px;
+      background: rgba(0,0,0,0.65);
+      border: 1px solid rgba(0,200,255,0.25);
+      border-radius: 8px;
+      padding: 14px 18px;
+      backdrop-filter: blur(6px);
+      z-index: 10;
+      width: 270px;
+    }
+
+    #controls h3 {
+      font-size: 12px;
+      color: #4cf;
+      letter-spacing: 1px;
+      margin-bottom: 10px;
+    }
+
+    .slider-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 7px;
+    }
+
+    .slider-row label {
+      font-size: 11px;
+      color: #aaa;
+      width: 82px;
+      flex-shrink: 0;
+    }
+
+    .slider-row input[type=range] {
+      flex: 1;
+      accent-color: #4cf;
+      cursor: pointer;
+    }
+
+    .slider-row .val {
+      font-size: 11px;
+      color: #4cf;
+      width: 34px;
+      text-align: right;
+    }
+
+    /* ── Key-hint panel ────────────────────────────────────────── */
+    #keyhints {
+      position: fixed;
+      bottom: 16px;
+      right: 16px;
+      background: rgba(0,0,0,0.65);
+      border: 1px solid rgba(0,200,255,0.25);
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 11px;
+      line-height: 2;
+      backdrop-filter: blur(6px);
+      z-index: 10;
+      color: #888;
+    }
+
+    #keyhints kbd {
+      background: rgba(255,255,255,0.1);
+      border: 1px solid #555;
+      border-radius: 3px;
+      padding: 1px 5px;
+      color: #ccc;
+      font-size: 10px;
+    }
+
+    /* ── Hover tooltip ─────────────────────────────────────────── */
+    #tooltip {
+      position: fixed;
+      pointer-events: none;
+      background: rgba(0,0,0,0.8);
+      border: 1px solid rgba(0,220,255,0.5);
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 11px;
+      line-height: 1.7;
+      display: none;
+      z-index: 20;
+      backdrop-filter: blur(4px);
+      color: #ddd;
+    }
+
+    #tooltip .t-title { color: #4cf; font-weight: 700; margin-bottom: 2px; }
+
+    /* ── Click ripple ──────────────────────────────────────────── */
+    .ripple {
+      position: fixed;
+      border-radius: 50%;
+      border: 2px solid rgba(0,220,255,0.8);
+      pointer-events: none;
+      animation: ripple-anim 0.6s ease-out forwards;
+      transform: translate(-50%, -50%);
+      z-index: 15;
+    }
+
+    @keyframes ripple-anim {
+      from { width: 0; height: 0; opacity: 1; }
+      to   { width: 80px; height: 80px; opacity: 0; }
+    }
+
+    /* ── Pause overlay ─────────────────────────────────────────── */
+    #pause-overlay {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 30;
+      pointer-events: none;
+    }
+
+    #pause-overlay.visible { display: flex; }
+
+    #pause-label {
+      font-size: 48px;
+      font-weight: 700;
+      color: rgba(0,220,255,0.5);
+      letter-spacing: 8px;
+      text-shadow: 0 0 30px #0af;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 0.9; }
+    }
+
+    /* ── Screenshot flash ──────────────────────────────────────── */
+    #flash {
+      position: fixed;
+      inset: 0;
+      background: #fff;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 50;
+      transition: opacity 0.05s ease-in;
+    }
+  </style>
+</head>
+<body>
+
+<!-- HUD title -->
+<div id="hud">
+  <div id="title">LORENZ ATTRACTOR</div>
+  <div id="subtitle">Turbulent Particle Swarm · Vasundhara</div>
+</div>
+
+<!-- Stats -->
+<div id="stats">
+  FPS: <span id="fps">–</span><br>
+  Particles: <span id="particle-count">–</span><br>
+  Time: <span id="sim-time">0.0s</span><br>
+  Camera: <span id="cam-info">–</span><br>
+  Mode: <span id="mode-info">Auto-Rotate</span>
+</div>
+
+<!-- Controls -->
+<div id="controls">
+  <h3>⚙ SIMULATION CONTROLS</h3>
+  <div class="slider-row">
+    <label>Sigma (σ)</label>
+    <input type="range" id="sl-sigma" min="1" max="50" step="0.1" value="10">
+    <span class="val" id="vl-sigma">10.0</span>
+  </div>
+  <div class="slider-row">
+    <label>Rho (ρ)</label>
+    <input type="range" id="sl-rho" min="0.1" max="100" step="0.1" value="28">
+    <span class="val" id="vl-rho">28.0</span>
+  </div>
+  <div class="slider-row">
+    <label>Beta (β)</label>
+    <input type="range" id="sl-beta" min="0.1" max="20" step="0.01" value="2.6667">
+    <span class="val" id="vl-beta">2.67</span>
+  </div>
+  <div class="slider-row">
+    <label>Scale</label>
+    <input type="range" id="sl-scale" min="0.1" max="2" step="0.01" value="0.5">
+    <span class="val" id="vl-scale">0.50</span>
+  </div>
+  <div class="slider-row">
+    <label>Turbulence</label>
+    <input type="range" id="sl-turb" min="0" max="2" step="0.01" value="0.5">
+    <span class="val" id="vl-turb">0.50</span>
+  </div>
+  <div class="slider-row">
+    <label>Speed</label>
+    <input type="range" id="sl-speed" min="0.1" max="5" step="0.05" value="1">
+    <span class="val" id="vl-speed">1.00</span>
+  </div>
+  <div class="slider-row">
+    <label>Particle Size</label>
+    <input type="range" id="sl-size" min="0.5" max="4" step="0.1" value="1.5">
+    <span class="val" id="vl-size">1.5</span>
+  </div>
+</div>
+
+<!-- Key hints -->
+<div id="keyhints">
+  <kbd>Space</kbd> Pause / Resume<br>
+  <kbd>R</kbd> Reset view<br>
+  <kbd>S</kbd> Screenshot<br>
+  <kbd>C</kbd> Colour cycle<br>
+  <kbd>Scroll</kbd> Zoom<br>
+  <kbd>Drag</kbd> Orbit<br>
+  <kbd>Click</kbd> Repel particles
+</div>
+
+<!-- Hover tooltip -->
+<div id="tooltip">
+  <div class="t-title">Particle Info</div>
+  <div id="tt-pos">Position: –</div>
+  <div id="tt-vel">Velocity: –</div>
+  <div id="tt-dist">Distance: –</div>
+</div>
+
+<!-- Pause overlay -->
+<div id="pause-overlay">
+  <div id="pause-label">PAUSED</div>
+</div>
+
+<!-- Screenshot flash -->
+<div id="flash"></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.165.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.165.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ═══════════════════════════════════════════════════════════
+// Configuration
+// ═══════════════════════════════════════════════════════════
+const PARTICLE_COUNT  = 20_000;
+const DT              = 0.008;
+const MAX_WORLD_BOUND = 100;     // world-space clamp (± units)
+const REPULSION_DECAY = 0.88;    // per-frame decay for click repulsion impulse
+const INV_TWO_PI      = 1 / (2 * Math.PI);  // precomputed for hue-from-angle
+
+// Noise seed constants — chosen to be incommensurate so particles decorrelate
+const NS_A1 = 13.7456, NS_A2 = 3.9;
+const NS_B1 = 73.1560, NS_B2 = 5.1;
+const NS_C1 = 42.2340, NS_C2 = 7.3;
+
+// ═══════════════════════════════════════════════════════════
+// Scene / Camera / Renderer
+// ═══════════════════════════════════════════════════════════
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(window.devicePixelRatio);
+document.body.appendChild(renderer.domElement);
+
+const scene  = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2000);
+camera.position.set(0, 20, 120);
+
+const orbit = new OrbitControls(camera, renderer.domElement);
+orbit.enableDamping = true;
+orbit.dampingFactor = 0.05;
+orbit.autoRotate    = true;
+orbit.autoRotateSpeed = 0.4;
+
+// Ambient fog
+scene.fog = new THREE.FogExp2(0x000000, 0.003);
+
+// ═══════════════════════════════════════════════════════════
+// Particle geometry
+// ═══════════════════════════════════════════════════════════
+const positions = new Float32Array(PARTICLE_COUNT * 3);
+const colors    = new Float32Array(PARTICLE_COUNT * 3);
+const sizes     = new Float32Array(PARTICLE_COUNT);
+
+// Seed each particle at a slightly different phase so they spread
+for (let i = 0; i < PARTICLE_COUNT; i++) {
+  const t = (i / PARTICLE_COUNT) * Math.PI * 2;
+  positions[i * 3]     = Math.sin(t) * 10 + (Math.random() - 0.5) * 2;
+  positions[i * 3 + 1] = Math.cos(t) * 20 + (Math.random() - 0.5) * 2;
+  positions[i * 3 + 2] = Math.sin(t * 1.3) * 10 + (Math.random() - 0.5) * 2;
+  colors[i * 3]     = 0.5;
+  colors[i * 3 + 1] = 0.8;
+  colors[i * 3 + 2] = 1.0;
+  sizes[i] = 1.5;
+}
+
+const geometry = new THREE.BufferGeometry();
+geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+geometry.setAttribute('color',    new THREE.BufferAttribute(colors,    3));
+geometry.setAttribute('size',     new THREE.BufferAttribute(sizes,     1));
+
+// Custom shader material for glowing, size-per-particle points
+const vertShader = /* glsl */`
+  attribute float size;
+  attribute vec3 color;
+  varying vec3 vColor;
+  varying float vAlpha;
+
+  void main() {
+    vColor = color;
+    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+    // Fade out very distant particles
+    vAlpha = clamp(1.0 - length(mvPosition.xyz) / 600.0, 0.05, 1.0);
+    gl_PointSize = size * (300.0 / -mvPosition.z);
+    gl_Position  = projectionMatrix * mvPosition;
+  }
+`;
+
+const fragShader = /* glsl */`
+  varying vec3 vColor;
+  varying float vAlpha;
+
+  void main() {
+    // Circular soft point
+    float d = length(gl_PointCoord - vec2(0.5));
+    if (d > 0.5) discard;
+    float alpha = (1.0 - d * 2.0) * vAlpha;
+    gl_FragColor = vec4(vColor, alpha);
+  }
+`;
+
+const material = new THREE.ShaderMaterial({
+  vertexShader:   vertShader,
+  fragmentShader: fragShader,
+  transparent: true,
+  depthWrite:  false,
+  blending:    THREE.AdditiveBlending,
+});
+
+const points = new THREE.Points(geometry, material);
+scene.add(points);
+
+// Hover sphere indicator
+const hoverGeo  = new THREE.SphereGeometry(1.2, 16, 16);
+const hoverMat  = new THREE.MeshBasicMaterial({ color: 0x00ddff, wireframe: true, transparent: true, opacity: 0.6 });
+const hoverMesh = new THREE.Mesh(hoverGeo, hoverMat);
+hoverMesh.visible = false;
+scene.add(hoverMesh);
+
+// Axes helper (subtle)
+const axesHelper = new THREE.AxesHelper(30);
+axesHelper.material.transparent = true;
+axesHelper.material.opacity = 0.15;
+scene.add(axesHelper);
+
+// ═══════════════════════════════════════════════════════════
+// Simulation state
+// ═══════════════════════════════════════════════════════════
+// Store per-particle (x,y,z) for Lorenz integration
+const px = new Float32Array(PARTICLE_COUNT);
+const py = new Float32Array(PARTICLE_COUNT);
+const pz = new Float32Array(PARTICLE_COUNT);
+
+// Velocities (for tooltip display)
+const vx = new Float32Array(PARTICLE_COUNT);
+const vy = new Float32Array(PARTICLE_COUNT);
+const vz = new Float32Array(PARTICLE_COUNT);
+
+// Repulsion impulse per particle
+const repX = new Float32Array(PARTICLE_COUNT);
+const repY = new Float32Array(PARTICLE_COUNT);
+const repZ = new Float32Array(PARTICLE_COUNT);
+
+for (let i = 0; i < PARTICLE_COUNT; i++) {
+  px[i] = positions[i * 3];
+  py[i] = positions[i * 3 + 1];
+  pz[i] = positions[i * 3 + 2];
+}
+
+// ═══════════════════════════════════════════════════════════
+// UI parameters (driven by sliders)
+// ═══════════════════════════════════════════════════════════
+let sigma = 10, rho = 28, beta = 8 / 3, scale = 0.5, turbulence = 0.5, speed = 1.0, particleSize = 1.5;
+let colourMode = 0;   // 0=hue-by-angle, 1=hue-by-z, 2=hue-by-speed, 3=rainbow-time
+let paused = false;
+let simTime = 0;
+let hoveredIdx = -1;
+
+function bindSlider(id, valId, setter) {
+  const sl  = document.getElementById(id);
+  const val = document.getElementById(valId);
+  sl.addEventListener('input', () => {
+    const v = parseFloat(sl.value);
+    val.textContent = v.toFixed(2);
+    setter(v);
+  });
+}
+
+bindSlider('sl-sigma', 'vl-sigma', v => { sigma = v; });
+bindSlider('sl-rho',   'vl-rho',   v => { rho   = v; });
+bindSlider('sl-beta',  'vl-beta',  v => { beta  = v; });
+bindSlider('sl-scale', 'vl-scale', v => { scale = v; });
+bindSlider('sl-turb',  'vl-turb',  v => { turbulence = v; });
+bindSlider('sl-speed', 'vl-speed', v => { speed = v; });
+bindSlider('sl-size',  'vl-size',  v => { particleSize = v; });
+
+// ═══════════════════════════════════════════════════════════
+// Mouse / Raycaster (hover + click)
+// ═══════════════════════════════════════════════════════════
+const mouse      = new THREE.Vector2(-9999, -9999);
+const raycaster  = new THREE.Raycaster();
+raycaster.params.Points.threshold = 2.0;
+
+const tooltip    = document.getElementById('tooltip');
+const ttPos      = document.getElementById('tt-pos');
+const ttVel      = document.getElementById('tt-vel');
+const ttDist     = document.getElementById('tt-dist');
+
+let mouseScreenX = 0, mouseScreenY = 0;
+
+renderer.domElement.addEventListener('mousemove', e => {
+  mouseScreenX = e.clientX;
+  mouseScreenY = e.clientY;
+
+  mouse.x =  (e.clientX / window.innerWidth)  * 2 - 1;
+  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+  tooltip.style.left = (e.clientX + 16) + 'px';
+  tooltip.style.top  = (e.clientY + 16) + 'px';
+});
+
+// Hide tooltip when mouse leaves the canvas
+renderer.domElement.addEventListener('mouseleave', () => {
+  tooltip.style.display = 'none';
+  hoverMesh.visible = false;
+  hoveredIdx = -1;
+});
+
+// Click → repel nearby particles
+renderer.domElement.addEventListener('click', e => {
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObject(points);
+
+  let repelWorld;
+  if (intersects.length > 0) {
+    repelWorld = intersects[0].point;
+  } else {
+    // Use a world point at the centre of the attractor's depth
+    repelWorld = new THREE.Vector3();
+    raycaster.ray.at(80, repelWorld);
+  }
+
+  const rx = repelWorld.x / scale;
+  const ry = repelWorld.y / scale;
+  const rz = repelWorld.z / scale;
+
+  const REPEL_RADIUS = 30;
+  const REPEL_FORCE  = 12;
+  for (let i = 0; i < PARTICLE_COUNT; i++) {
+    const dx = px[i] - rx;
+    const dy = py[i] - ry;
+    const dz = pz[i] - rz;
+    const d2 = dx * dx + dy * dy + dz * dz;
+    if (d2 < REPEL_RADIUS * REPEL_RADIUS && d2 > 0.0001) {
+      const d   = Math.sqrt(d2);
+      const mag = REPEL_FORCE * (1 - d / REPEL_RADIUS);
+      repX[i] += (dx / d) * mag;
+      repY[i] += (dy / d) * mag;
+      repZ[i] += (dz / d) * mag;
+    }
+  }
+
+  spawnRipple(e.clientX, e.clientY);
+});
+
+function spawnRipple(cx, cy) {
+  const el = document.createElement('div');
+  el.className = 'ripple';
+  el.style.left = cx + 'px';
+  el.style.top  = cy + 'px';
+  document.body.appendChild(el);
+  el.addEventListener('animationend', () => el.remove());
+}
+
+// ═══════════════════════════════════════════════════════════
+// Keyboard shortcuts
+// ═══════════════════════════════════════════════════════════
+document.addEventListener('keydown', e => {
+  switch (e.key.toLowerCase()) {
+    case ' ':
+      e.preventDefault();
+      paused = !paused;
+      document.getElementById('pause-overlay').classList.toggle('visible', paused);
+      document.getElementById('mode-info').textContent = paused ? 'Paused' : 'Auto-Rotate';
+      break;
+
+    case 'r':
+      camera.position.set(0, 20, 120);
+      camera.lookAt(0, 0, 0);
+      orbit.reset();
+      break;
+
+    case 's':
+      takeScreenshot();
+      break;
+
+    case 'c':
+      colourMode = (colourMode + 1) % 4;
+      const names = ['Angle', 'Height', 'Speed', 'Rainbow'];
+      document.getElementById('mode-info').textContent = 'Colour: ' + names[colourMode];
+      break;
+  }
+});
+
+function takeScreenshot() {
+  const flash = document.getElementById('flash');
+  flash.style.opacity = '0.8';
+  setTimeout(() => { flash.style.opacity = '0'; }, 100);
+
+  const link = document.createElement('a');
+  link.download = `lorenz-${Date.now()}.png`;
+  link.href = renderer.domElement.toDataURL('image/png');
+  link.click();
+}
+
+// ═══════════════════════════════════════════════════════════
+// Resize
+// ═══════════════════════════════════════════════════════════
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ═══════════════════════════════════════════════════════════
+// FPS counter
+// ═══════════════════════════════════════════════════════════
+let frames = 0, lastFPSTime = performance.now();
+const fpsDom     = document.getElementById('fps');
+const timeDom    = document.getElementById('sim-time');
+const camDom     = document.getElementById('cam-info');
+const countDom   = document.getElementById('particle-count');
+countDom.textContent = PARTICLE_COUNT.toLocaleString();
+
+// ═══════════════════════════════════════════════════════════
+// Colour helpers
+// ═══════════════════════════════════════════════════════════
+const tmpColor = new THREE.Color();
+
+function setParticleColour(i, xv, yv, zv, spd, t) {
+  let h, s, l;
+  switch (colourMode) {
+    case 0: // Hue by angle in XY plane
+      h = (Math.atan2(yv, xv) * INV_TWO_PI + 0.5 + t * 0.05) % 1.0;
+      s = 0.8;
+      l = 0.35 + Math.abs(zv) * 0.008;
+      break;
+    case 1: // Hue by Z height
+      h = ((zv + 50) / 100 + t * 0.04) % 1.0;
+      s = 0.9;
+      l = 0.4;
+      break;
+    case 2: // Hue by speed
+      h = Math.min(spd * 0.02, 1.0);
+      s = 1.0;
+      l = 0.3 + spd * 0.005;
+      break;
+    case 3: // Rainbow over time + particle index
+      h = (i / PARTICLE_COUNT + t * 0.1) % 1.0;
+      s = 0.9;
+      l = 0.45;
+      break;
+  }
+  h = ((h % 1.0) + 1.0) % 1.0;
+  l = Math.min(Math.max(l, 0.1), 0.9);
+
+  tmpColor.setHSL(h, s, l);
+  colors[i * 3]     = tmpColor.r;
+  colors[i * 3 + 1] = tmpColor.g;
+  colors[i * 3 + 2] = tmpColor.b;
+}
+
+// ═══════════════════════════════════════════════════════════
+// Hover detection (closest-point in screen-space)
+// ═══════════════════════════════════════════════════════════
+const _proj = new THREE.Vector3();
+
+function findHoveredParticle() {
+  if (mouse.x === -9999) return -1;
+
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObject(points);
+  if (intersects.length > 0) {
+    return intersects[0].index;
+  }
+  return -1;
+}
+
+// ═══════════════════════════════════════════════════════════
+// Animation loop
+// ═══════════════════════════════════════════════════════════
+let lastTime = performance.now();
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  const now  = performance.now();
+  const dt   = Math.min((now - lastTime) / 1000, 0.05);
+  lastTime   = now;
+
+  frames++;
+  if (now - lastFPSTime >= 500) {
+    fpsDom.textContent    = Math.round(frames * 1000 / (now - lastFPSTime));
+    lastFPSTime = now;
+    frames      = 0;
+    camDom.textContent    = `(${camera.position.x.toFixed(1)}, ${camera.position.y.toFixed(1)}, ${camera.position.z.toFixed(1)})`;
+  }
+
+  orbit.update();
+
+  if (!paused) {
+    simTime += dt * speed;
+
+    const steps = 2;  // sub-steps per frame for smoother integration
+    const subDT = DT * speed / steps;
+
+    for (let s = 0; s < steps; s++) {
+      for (let i = 0; i < PARTICLE_COUNT; i++) {
+        let x = px[i], y = py[i], z = pz[i];
+
+        // Lorenz equations
+        const dx = sigma * (y - x);
+        const dy = x * (rho - z) - y;
+        const dz = x * y - beta * z;
+
+        // Noise / turbulence
+        const noiseA = Math.sin(i * NS_A1 + simTime * NS_A2);
+        const noiseB = Math.cos(i * NS_B1 + simTime * NS_B2);
+        const noiseC = Math.sin(i * NS_C1 + simTime * NS_C2);
+
+        const turbScale = turbulence * 2;
+        const turbX = noiseA * turbScale + repX[i];
+        const turbY = noiseB * turbScale + repY[i];
+        const turbZ = noiseC * turbScale + repZ[i];
+
+        const nx = x + (dx + turbX) * subDT;
+        const ny = y + (dy + turbY) * subDT;
+        const nz = z + (dz + turbZ) * subDT;
+
+        vx[i] = nx - x;
+        vy[i] = ny - y;
+        vz[i] = nz - z;
+
+        px[i] = nx;
+        py[i] = ny;
+        pz[i] = nz;
+
+        // Fade repulsion impulse
+        repX[i] *= REPULSION_DECAY;
+        repY[i] *= REPULSION_DECAY;
+        repZ[i] *= REPULSION_DECAY;
+
+        // Map to world space
+        const wx = Math.max(-MAX_WORLD_BOUND, Math.min(MAX_WORLD_BOUND, nx * scale));
+        const wy = Math.max(-MAX_WORLD_BOUND, Math.min(MAX_WORLD_BOUND, ny * scale));
+        const wz = Math.max(-MAX_WORLD_BOUND, Math.min(MAX_WORLD_BOUND, nz * scale));
+
+        positions[i * 3]     = wx;
+        positions[i * 3 + 1] = wy;
+        positions[i * 3 + 2] = wz;
+
+        const spd = Math.sqrt(vx[i] * vx[i] + vy[i] * vy[i] + vz[i] * vz[i]);
+        setParticleColour(i, nx, ny, nz, spd, simTime);
+
+        // Size: slightly larger for hovered particle
+        sizes[i] = (i === hoveredIdx) ? particleSize * 3 : particleSize;
+      }
+    }
+
+    timeDom.textContent = simTime.toFixed(1) + 's';
+
+    geometry.attributes.position.needsUpdate = true;
+    geometry.attributes.color.needsUpdate    = true;
+    geometry.attributes.size.needsUpdate     = true;
+  }
+
+  // ── Hover detection ──────────────────────────────────────
+  hoveredIdx = findHoveredParticle();
+  if (hoveredIdx >= 0) {
+    const wx = positions[hoveredIdx * 3];
+    const wy = positions[hoveredIdx * 3 + 1];
+    const wz = positions[hoveredIdx * 3 + 2];
+
+    hoverMesh.position.set(wx, wy, wz);
+    hoverMesh.visible = true;
+
+    const spd = Math.sqrt(vx[hoveredIdx] ** 2 + vy[hoveredIdx] ** 2 + vz[hoveredIdx] ** 2);
+    ttPos.textContent  = `Position: (${wx.toFixed(1)}, ${wy.toFixed(1)}, ${wz.toFixed(1)})`;
+    ttVel.textContent  = `Speed: ${(spd / DT).toFixed(2)}`;
+    ttDist.textContent = `Index: #${hoveredIdx}`;
+
+    tooltip.style.display = 'block';
+  } else {
+    hoverMesh.visible     = false;
+    tooltip.style.display = 'none';
+  }
+
+  renderer.render(scene, camera);
+}
+
+animate();
+</script>
+</body>
+</html>
