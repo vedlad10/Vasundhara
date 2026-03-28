@@ -1,1 +1,3 @@
-Python dependencies (fastapi, uvicorn, numpy, onnxruntime optional)
+fastapi==0.104.1
+uvicorn==0.24.0
+numpy==1.24.3
