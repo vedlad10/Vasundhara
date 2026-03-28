@@ -1,0 +1,1 @@
+FastAPI backend server with WebSocket endpoint, ML model loader, inference engine, preprocessing, postprocessing, connection manager, health check, metrics endpoints

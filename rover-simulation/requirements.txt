@@ -1,0 +1,1 @@
+Python dependencies (fastapi, uvicorn, numpy, onnxruntime optional)
